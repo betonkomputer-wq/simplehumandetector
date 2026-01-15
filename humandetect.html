@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Realtime Human Detection</title>
+    <style>
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f0f0f0;
+            text-align: center;
+            padding: 20px;
+        }
+
+        h1 { color: #333; text-decoration: underline; }
+
+        #container {
+            position: relative;
+            display: inline-block;
+            border: 5px solid #333;
+            box-shadow: 10px 10px 5px grey;
+            background: black;
+        }
+
+        video { display: block; transform: scaleX(-1); }
+        canvas { position: absolute; top: 0; left: 0; transform: scaleX(-1); }
+
+        .tombol {
+            margin-top: 20px;
+            padding: 15px 30px;
+            font-size: 18px;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+            margin: 5px;
+        }
+
+        .btn-start { background-color: green; }
+        .btn-start:hover { background-color: darkgreen; }
+
+        .btn-stop { background-color: red; }
+        .btn-stop:hover { background-color: darkred; }
+
+        #status {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>PROGRAM DETEKSI MANUSIA REAL-TIME</h1>
+
+    <div id="status">Sabar ya lagi loading.</div>
+
+    <div id="container">
+        <video id="kameraSaya" autoplay playsinline muted width="640" height="480"></video>
+        <canvas id="kanvasSaya" width="640" height="480"></canvas>
+    </div>
+
+    <br>
+    
+    <button class="tombol btn-start" onclick="mulaiAksi()">NYALAKAN KAMERA</button>
+    <button class="tombol btn-stop" onclick="matikanSemua()">MATIKAN KAMERA</button>
+    
+    <br><br>
+    <h2>Jumlah Orang: <span id="hitungan" style="color: blue; font-size: 40px;">0</span></h2>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+    <script>
+
+        let modelSudahSiap = false;
+        let modelAI;
+        let bolehDeteksi = false;
+        
+        const video = document.getElementById('kameraSaya');
+        const canvas = document.getElementById('kanvasSaya');
+        const ctx = canvas.getContext('2d');
+        const statusTeks = document.getElementById('status');
+        
+        // model
+        cocoSsd.load({ base: 'lite_mobilenet_v2' }).then(function(loadedModel) {
+            modelAI = loadedModel;
+            modelSudahSiap = true;
+            statusTeks.innerHTML = "MODEL SIAP! SILAKAN KLIK NYALAKAN.";
+            statusTeks.style.color = "green";
+            console.log("Model masuk pak eko.");
+        });
+
+        // nyalakan kamera
+        function mulaiAksi() {
+            if (!modelSudahSiap) {
+                alert("Sabar");
+                return;
+            }
+            if (bolehDeteksi) {
+                alert("Kamera sudah nyala.");
+                return;
+            }
+
+            statusTeks.innerHTML = "KAMERA NYALA - SEDANG MENDETEKSI...";
+            statusTeks.style.color = "blue";
+
+            if (navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function(stream) {
+                        video.srcObject = stream;
+                        bolehDeteksi = true;
+                        
+                        video.onloadeddata = function() {
+                            deteksiTerusMenerus();
+                        };
+                    })
+                    .catch(function(err) {
+                        alert("Error kamera: " + err);
+                    });
+            }
+        }
+
+        // stop
+        function matikanSemua() {
+            bolehDeteksi = false;
+            const stream = video.srcObject;
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(function(track) {
+                    track.stop();
+                });
+                video.srcObject = null;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById("hitungan").innerHTML = "0";
+            statusTeks.innerHTML = "KAMERA MATI (STANDBY)";
+            statusTeks.style.color = "red";
+        }
+
+        // looping
+        function deteksiTerusMenerus() {
+            if (!bolehDeteksi) return;
+            modelAI.detect(video).then(function(predictions) {
+                if (!bolehDeteksi) return;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                gambarKotak(predictions);
+                requestAnimationFrame(deteksiTerusMenerus); 
+            });
+        }
+
+        function gambarKotak(dataPrediksi) {
+            let jumlahOrang = 0;
+            ctx.font = '20px Arial';
+            ctx.lineWidth = 4;
+
+            dataPrediksi.forEach(function(benda) {
+                if (benda.class === 'person') {
+                    jumlahOrang++; 
+                    const x = benda.bbox[0];
+                    const y = benda.bbox[1];
+                    const w = benda.bbox[2];
+                    const h = benda.bbox[3];
+
+                    ctx.strokeStyle = 'red';
+                    ctx.strokeRect(x, y, w, h);
+                    ctx.fillStyle = 'red';
+                    ctx.fillRect(x, y - 30, w, 30);
+                    ctx.fillStyle = 'white';
+                    ctx.fillText("ORANG (" + Math.round(benda.score * 100) + "%)", x + 5, y - 7);
+                }
+            });
+            document.getElementById("hitungan").innerHTML = jumlahOrang;
+        }
+
+    </script>
+</body>
+</html>
